@@ -1,0 +1,46 @@
+---
+title: "HW2 Sample"
+output: html_document
+---
+
+
+```{r message=FALSE, warning=FALSE}
+# Loading packages
+library(tidyverse)
+library(lubridate)
+```
+
+```{r}
+# Loading data from github (not a local directory)
+imdb <- read.csv("https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2019/2019-01-08/IMDb_Economist_tv_ratings.csv")
+imdb$date <- as.Date(imdb$date)
+```
+#(a)
+```{r}
+
+imdb %>%
+  filter(genres == "Action,Adventure,Drama", year(date) > 2017) %>%
+  group_by(title, seasonNumber) %>%
+  arrange(desc(av_rating)) %>%
+  head(1) %>%
+  select(title, seasonNumber, av_rating)
+
+# It is okay if you don't exclude 2017 TV series. The result will be Game of Thrones instead.
+```
+
+#(b)
+```{r}
+temp <- imdb %>% filter(title == "Law & Order" | title == "Law & Order: Special Victims Unit")
+plot1 <- ggplot(data = temp, aes(x = date, y = av_rating, col = factor(title))) + geom_point() +
+  geom_line() + labs(title = "TV Series Ratings: Law & Order versus SVU", col = "TV series")
+plot1
+```
+
+#(c)
+```{r}
+temp <- imdb %>% filter(title == "Criminal Minds")
+plot2 <- ggplot(data = temp, aes(x = date, y = av_rating, col = title)) + geom_point() +
+  geom_line() + labs(title = "TV Series Ratings: Criminal Minds", col = "TV series")
+plot2
+```
+ 

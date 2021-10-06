@@ -1,0 +1,156 @@
+---
+title: "HW6 Solutions"
+output: html_document
+---
+
+```{r message=FALSE, warning=FALSE}
+library(tidytext)
+library(tidyverse)
+library(gutenbergr)
+library(tidyr)
+library(ggplot2)
+library(wordcloud)
+library(rvest)
+library(lubridate)
+```
+
+#2
+```{r}
+books <- gutenberg_download(
+  gutenberg_id = c(11, 1400),
+  meta_fields = "title"
+)
+
+book1 <- books %>% filter(gutenberg_id == 11)
+book2 <- books %>% filter(gutenberg_id == 1400)
+```
+
+##(a)
+```{r}
+book2 %>%
+  unnest_tokens(word, text) %>%
+  anti_join(stop_words) %>%
+  count(word, sort = T) %>%
+  top_n(10) %>%
+  with(wordcloud(word, n, max.words = 100))
+```
+
+##(b)
+```{r}
+book2 %>%
+  unnest_tokens(word, text, token = "ngrams", n = 2) %>%
+  separate(word, c("word1", "word2"), sep = " ") %>%
+  filter(!word1 %in% stop_words$word) %>%
+  filter(!word2 %in% stop_words$word) %>%
+  unite(word, word1, word2, sep = " ") %>%
+  count(word, sort = TRUE) %>%
+  top_n(10)
+```
+
+
+##(c)
+```{r}
+tidy_books <- books %>%
+  group_by(title) %>%
+  mutate(
+    linenumber = row_number(),
+    chapter = cumsum(str_detect(text, regex("^chapter [\\divxlc]",
+      ignore_case = TRUE
+    )))
+  ) %>%
+  ungroup() %>%
+  unnest_tokens(word, text) %>%
+  filter(!word == "miss")
+
+sa_books <- tidy_books %>%
+  inner_join(get_sentiments("bing")) %>%
+  count(title, index = linenumber %/% 80, sentiment) %>%
+  spread(sentiment, n, fill = 0) %>%
+  mutate(sentiment = positive - negative)
+
+
+ggplot(sa_books, aes(index, sentiment, fill = title)) +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(~title, ncol = 2, scales = "free_x")
+```
+
+
+#3
+##(b)
+```{r}
+forecast <- "https://weather.com/weather/hourbyhour/l/USNJ0524:1:US" %>%
+  read_html() %>%
+  html_table(fill = TRUE) %>%
+  as.data.frame()
+
+colnames(forecast) <- c("NA", colnames(forecast[1:7]))
+forecast <- forecast[, -1]
+
+forecast %>%
+  gather(c(Temp, Humidity, Wind), key = target, value = n) %>%
+  mutate(n = as.numeric(str_extract(n, "[0-9]{1,2}"))) %>%
+  ggplot(aes(Time, n, group = 1)) +
+  geom_point() +
+  geom_line() +
+  facet_wrap(~target, nrow = 3, scales = "free")
+```
+
+
+#4
+
+```{r}
+scraped <- "https://www.youtube.com/feed/trending" %>%
+  read_html() %>%
+  html_nodes("div") %>%
+  html_text() %>%
+  .[2]
+```
+
+##Regular expressions
+```{r}
+videos_regex <- "(?<=  \n).*[0-9](?= views\\S)" # Video blocks
+expand_regex <- paste(c(
+  "^.*(?= - Duration: )", # Title
+  "(?<= ago).*$", # Views
+  "(?<=- Duration: ).*[0-9](?=\\.)", # Duration
+  "[0-9] (\\w*)(?= ago[0-9])" # Post Date
+), collapse = "|")
+```
+
+```{r message=FALSE, warning=FALSE}
+youtube <- data.frame(blocks = str_extract_all(scraped, videos_regex) %>% unlist()) %>%
+  transmute(1:nrow(.), title = str_extract_all(blocks, expand_regex)) %>%
+  unnest_wider(col = title) %>%
+  setNames(c("rank", "title", "length", "post_date", "views")) %>%
+  mutate(views = as.numeric(gsub(",", "", views)))
+```
+
+##(a)
+```{r}
+youtube <- youtube %>% mutate(post_date = as.numeric(duration(post_date))/86400)
+
+head(youtube, 10)
+```
+
+##(b)
+```{r message=FALSE, warning=FALSE}
+youtube <- youtube %>%
+  group_by(title) %>%
+  mutate(
+    form = str_count(length, ":"), h = as.numeric(ms(length)),
+    m = as.numeric(hms(length)), s = as.numeric(seconds(length)),
+    length = sum(h, m, s, na.rm = T)
+  ) %>%
+  select(-c("form", "h", "m", "s"))
+
+head(youtube, 10)
+```
+
+##(c)
+```{r}
+temp <- youtube %>%
+  mutate(popularity = views / post_date) %>%
+  ggplot(aes(rank, popularity))
+
+temp + geom_bar(stat = "identity") + coord_flip()
+```

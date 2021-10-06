@@ -1,0 +1,95 @@
+---
+title: "HW5 Solutions"
+author: 
+output: html_document
+---
+```{r}
+library(tidyverse)
+library(broom)
+library(readxl)
+library(stringr)
+```
+# Q1
+
+```{r}
+rd_fed <- readr::read_csv("https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2019/2019-02-12/fed_r_d_spending.csv")
+```
+
+## (a)
+```{r}
+rd_reform <- rd_fed %>%
+  transmute(
+    rd_budget_frac = rd_budget / total_outlays,
+    department,
+    year
+  ) %>%
+  cbind(augment(lm(rd_budget_frac ~ department + year, data = .)) %>% transmute(
+    upr = .fitted + 1.96 * .se.fit,
+    lwr = .fitted - 1.96 * .se.fit
+  ))
+
+head(rd_reform)
+```
+
+
+## (b)
+```{r}
+rd_plot <- rd_reform %>% filter(department %in% c("NASA", "NSF", "DHS", "DOD"))
+ggplot(rd_plot, aes(x = year, y = rd_budget_frac)) +
+  geom_point() + geom_errorbar(aes(ymin = lwr, ymax = upr), col = "blue") +
+  facet_wrap(~department, ncol = 2, scales = "free")
+```
+
+# 2
+```{r message=FALSE, warning=FALSE}
+migration <- read_excel("UN_MigrantStockByOriginAndDestination_2015.xlsx", sheet = "Table 16", skip = 15)[, -c(1, 3)]
+colnames(migration)[1:3] <- c("Destination", "Code", "Type")
+
+
+region_list <- migration %>%
+  subset(!str_detect(Code, regex("^(9|550)"))) %>%
+  .$Destination
+region_migration <- migration %>%
+  subset(!str_detect(migration$Code, regex("^(9|550)"))) %>%
+  select(1, region_list) %>%
+  replace(is.na(.), 0)
+
+
+
+tidy_migration <- gather(region_migration, key = "Origin", value = "n", -Destination)
+
+#Or use the following code
+#tidy_migration <- reshape2::melt(country_migration)
+```
+
+## (a)
+```{r}
+tidy_migration %>%
+  subset(Destination == "Canada") %>%
+  arrange(desc(n)) %>%
+  top_n(5)
+```
+
+## (b)
+```{r}
+tidy_migration %>%
+  subset(Origin == "Canada") %>%
+  arrange(desc(n)) %>%
+  top_n(5)
+```
+
+## (c)
+
+Q2 part(c). Need to count total numbers for both immigrants and  emigrants between two regions.
+```{r}
+region_pairs <- region_migration[, -1] + t(region_migration[, -1])
+
+tidy_migration <- cbind(region_migration[, 1], region_pairs) %>% gather(key = "Region2", value = "n", -Destination)
+colnames(tidy_migration)[1] <- c("Region1")
+
+tidy_migration %>%
+  mutate(Region2 = as.character(Region2)) %>%
+  filter(Region2 <= Region1) %>%
+  arrange(desc(n)) %>%
+  top_n(10)
+```

@@ -1,0 +1,83 @@
+---
+title: "HW4 Samples"
+output: html_document
+---
+```{r message=FALSE, warning=FALSE}
+library(readr)
+library(tidyverse)
+phd_field <- readr::read_csv("https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2019/2019-02-19/phd_by_field.csv")
+phd_field <- phd_field %>% mutate(n_phds = replace_na(n_phds, 0))
+```
+
+# (a)
+
+```{r}
+r2 <- phd_field %>%
+  split(.$major_field) %>%
+  map(~ lm(n_phds ~ year + field, data = .x)) %>%
+  map(summary) %>%
+  map_df("r.squared") %>%
+  gather(key = "major_field", value = "r_squared") %>%
+  right_join(phd_field)
+
+plot1 <- ggplot(data = r2, aes(x = broad_field, y = r_squared)) +
+  geom_boxplot() +
+  ggtitle("Box plots of R-squared") +
+  xlab("Broad Field") +
+  ylab("R-Squared") + 
+  coord_flip()
+plot1
+```
+
+# (b)
+```{r}
+phd_field %>%
+  group_by(field) %>%
+  mutate(rank = min_rank(desc(n_phds)))
+
+phd_field %>%
+  group_by(major_field, field) %>%
+  summarise(n = sum(n_phds)) %>%
+  mutate(rank = min_rank(desc(n)))
+
+phd_field %>%
+  group_by(broad_field, year) %>%
+  summarise(n = sum(n_phds)) %>%
+  mutate(rank = min_rank(desc(n)))
+```
+
+
+# (c)
+
+## Years with more phds awarded than the previous year.
+```{r}
+phd_field %>%
+  group_by(field) %>%
+  arrange(year) %>%
+  mutate(Diff = c(0, diff(n_phds))) %>% # NA produced
+  filter(Diff > 0) %>%
+  select(field, year) %>%
+  arrange(field) 
+```
+
+## Quartiles
+```{r}
+phd_field %>% group_by(broad_field) %>% summarise(q=list(quantile(n_phds))) %>% unnest_wider(q)
+# or aggregated over year then calculate quartiles. 
+```
+
+# (d)
+```{r, error=T}
+ratio <- function(x, df) {
+  .list <- unique(df$broad_field)
+  if ((x %in% .list) == F) stop(paste("character input '", x, "' does not belong to broad_field", sep = ""))
+  df %>%
+    filter(broad_field == x) %>%
+    summarise(Mean = mean(n_phds, na.rm = T), Sd = sd(n_phds, na.rm = T)) %>%
+    summarise(ratio = Mean / Sd)
+}
+
+
+ratio("Life sciences", phd_field)
+ratio("Gaming", phd_field)
+```
